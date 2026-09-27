@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.schemas.audit_log import AuditLogResponse
 from app.schemas.lead import (
     LeadCreate,
     LeadResponse,
     LeadStatusUpdate,
     LeadUpdate,
 )
+from app.services.audit_log import get_audit_logs_by_lead_service
 from app.services.lead import (
     create_lead_service,
     get_lead_service,
@@ -132,4 +134,26 @@ def update_lead_status(
         db,
         lead,
         status=payload.status,
+    )
+
+
+@router.get(
+    "/{lead_id}/audit-logs",
+    response_model=list[AuditLogResponse],
+)
+def get_lead_audit_logs(
+    lead_id: UUID,
+    db: Session = Depends(get_db),
+):
+    lead = get_lead_service(db, lead_id)
+
+    if lead is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found",
+        )
+
+    return get_audit_logs_by_lead_service(
+        db,
+        lead_id,
     )

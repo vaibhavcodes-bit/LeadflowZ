@@ -3,7 +3,6 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.lead import Lead
-
 from app.repositories.lead import (
     create_lead,
     get_lead,
@@ -11,6 +10,7 @@ from app.repositories.lead import (
     get_leads,
     update_lead,
 )
+from app.services.audit_log import create_audit_log_service
 
 
 def create_lead_service(
@@ -24,7 +24,7 @@ def create_lead_service(
     source: str | None = None,
     notes: str | None = None,
 ) -> Lead:
-    return create_lead(
+    lead = create_lead(
         db,
         name=name,
         external_lead_id=external_lead_id,
@@ -34,6 +34,15 @@ def create_lead_service(
         source=source,
         notes=notes,
     )
+
+    create_audit_log_service(
+        db,
+        lead_id=lead.id,
+        event_type="lead_created",
+        description="Lead created",
+    )
+
+    return lead
 
 
 def get_lead_service(
@@ -69,7 +78,7 @@ def update_lead_service(
     source: str | None = None,
     notes: str | None = None,
 ) -> Lead:
-    return update_lead(
+    updated_lead = update_lead(
         db,
         lead,
         name=name,
@@ -79,6 +88,15 @@ def update_lead_service(
         notes=notes,
     )
 
+    create_audit_log_service(
+        db,
+        lead_id=updated_lead.id,
+        event_type="lead_updated",
+        description="Lead updated",
+    )
+
+    return updated_lead
+
 
 def update_lead_status_service(
     db: Session,
@@ -86,8 +104,19 @@ def update_lead_status_service(
     *,
     status: str,
 ) -> Lead:
-    return update_lead(
+    old_status = lead.status
+
+    updated_lead = update_lead(
         db,
         lead,
         status=status,
     )
+
+    create_audit_log_service(
+        db,
+        lead_id=lead.id,
+        event_type="lead_status_changed",
+        description=f"Lead status changed from {old_status} to {status}",
+    )
+
+    return updated_lead
