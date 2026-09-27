@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.routes.leads import router as leads_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -16,3 +17,9 @@ def health_check() -> dict[str, str]:
         "status": "ok",
         "service": settings.app_name,
     }
+
+
+app.include_router(
+    leads_router,
+    prefix=settings.api_prefix,
+)
