@@ -39,6 +39,16 @@ def get_lead(
     lead_id: UUID,
 ) -> Lead | None:
     statement = select(Lead).where(Lead.id == lead_id)
+    return db.scalar(statement)
+
+
+def get_lead_by_external_id(
+    db: Session,
+    external_lead_id: str,
+) -> Lead | None:
+    statement = select(Lead).where(
+        Lead.external_lead_id == external_lead_id
+    )
 
     return db.scalar(statement)
 
@@ -47,7 +57,6 @@ def get_leads(
     db: Session,
 ) -> list[Lead]:
     statement = select(Lead).order_by(Lead.created_at.desc())
-
     return list(db.scalars(statement).all())
 
 

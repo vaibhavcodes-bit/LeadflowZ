@@ -3,9 +3,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.lead import Lead
+
 from app.repositories.lead import (
     create_lead,
     get_lead,
+    get_lead_by_external_id,
     get_leads,
     update_lead,
 )
@@ -45,6 +47,16 @@ def get_leads_service(
     db: Session,
 ) -> list[Lead]:
     return get_leads(db)
+
+
+def get_lead_by_external_id_service(
+    db: Session,
+    external_lead_id: str,
+) -> Lead | None:
+    return get_lead_by_external_id(
+        db,
+        external_lead_id,
+    )
 
 
 def update_lead_service(

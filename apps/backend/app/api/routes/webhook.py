@@ -3,7 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.schemas.webhook import MetaLeadWebhook
-from app.services.lead import create_lead_service
+from app.services.lead import (
+    create_lead_service,
+    get_lead_by_external_id_service,
+)
 
 
 router = APIRouter(
@@ -29,6 +32,14 @@ def receive_meta_lead(
     payload: MetaLeadWebhook,
     db: Session = Depends(get_db),
 ):
+    existing_lead = get_lead_by_external_id_service(
+        db,
+        payload.external_lead_id,
+    )
+
+    if existing_lead is not None:
+        return existing_lead
+
     return create_lead_service(
         db,
         external_lead_id=payload.external_lead_id,
