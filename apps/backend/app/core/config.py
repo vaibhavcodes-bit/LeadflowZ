@@ -10,11 +10,12 @@ class Settings(BaseSettings):
 
     database_url: str
 
-    webhook_secret: str
+    webhook_secret: str = "local-development-secret"
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        case_sensitive=False,
         extra="ignore",
     )
 
