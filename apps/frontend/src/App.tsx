@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+
 import "./App.css";
 
 type LeadStatus =
@@ -20,7 +21,8 @@ interface Lead {
   updated_at?: string | null;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const statusLabels: Record<string, string> = {
   new: "New",
@@ -30,11 +32,11 @@ const statusLabels: Record<string, string> = {
   lost: "Lost",
 };
 
-function getStatusLabel(status: string) {
+function getStatusLabel(status: string): string {
   return statusLabels[status] || status;
 }
 
-function getInitials(name: string) {
+function getInitials(name: string): string {
   return name
     .trim()
     .split(/\s+/)
@@ -43,7 +45,7 @@ function getInitials(name: string) {
     .join("");
 }
 
-function formatDate(value?: string | null) {
+function formatDate(value?: string | null): string {
   if (!value) {
     return "—";
   }
@@ -64,11 +66,12 @@ function formatDate(value?: string | null) {
 function App() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const fetchLeads = async () => {
+  async function fetchLeads(): Promise<void> {
     try {
       setLoading(true);
       setError("");
@@ -76,26 +79,33 @@ function App() {
       const response = await fetch(`${API_URL}/api/leads`);
 
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        throw new Error(
+          `Request failed with status ${response.status}`,
+        );
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
 
       if (!Array.isArray(data)) {
         throw new Error("Invalid leads response");
       }
 
-      setLeads(data);
+      setLeads(data as Lead[]);
     } catch (err) {
       console.error(err);
-      setError("Unable to load leads. Please try again.");
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load leads. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    fetchLeads();
+    void fetchLeads();
   }, []);
 
   const filteredLeads = useMemo(() => {
@@ -110,7 +120,8 @@ function App() {
         lead.source?.toLowerCase().includes(query);
 
       const matchesStatus =
-        statusFilter === "all" || lead.status === statusFilter;
+        statusFilter === "all" ||
+        lead.status.toLowerCase() === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -119,10 +130,18 @@ function App() {
   const statusCounts = useMemo(() => {
     return {
       all: leads.length,
-      new: leads.filter((lead) => lead.status === "new").length,
-      contacted: leads.filter((lead) => lead.status === "contacted").length,
-      qualified: leads.filter((lead) => lead.status === "qualified").length,
-      converted: leads.filter((lead) => lead.status === "converted").length,
+      new: leads.filter(
+        (lead) => lead.status.toLowerCase() === "new",
+      ).length,
+      contacted: leads.filter(
+        (lead) => lead.status.toLowerCase() === "contacted",
+      ).length,
+      qualified: leads.filter(
+        (lead) => lead.status.toLowerCase() === "qualified",
+      ).length,
+      converted: leads.filter(
+        (lead) => lead.status.toLowerCase() === "converted",
+      ).length,
     };
   }, [leads]);
 
@@ -143,7 +162,7 @@ function App() {
           <button
             className="refresh-button"
             type="button"
-            onClick={fetchLeads}
+            onClick={() => void fetchLeads()}
             disabled={loading}
           >
             <span className="refresh-icon">↻</span>
@@ -160,7 +179,9 @@ function App() {
 
             <strong>{statusCounts.all}</strong>
 
-            <span className="stat-description">All incoming leads</span>
+            <span className="stat-description">
+              All incoming leads
+            </span>
           </div>
 
           <div className="stat-card">
@@ -171,7 +192,9 @@ function App() {
 
             <strong>{statusCounts.new}</strong>
 
-            <span className="stat-description">Needs attention</span>
+            <span className="stat-description">
+              Needs attention
+            </span>
           </div>
 
           <div className="stat-card">
@@ -182,7 +205,9 @@ function App() {
 
             <strong>{statusCounts.qualified}</strong>
 
-            <span className="stat-description">Sales qualified</span>
+            <span className="stat-description">
+              Sales qualified
+            </span>
           </div>
 
           <div className="stat-card">
@@ -193,7 +218,9 @@ function App() {
 
             <strong>{statusCounts.converted}</strong>
 
-            <span className="stat-description">Successfully converted</span>
+            <span className="stat-description">
+              Successfully converted
+            </span>
           </div>
         </section>
 
@@ -204,7 +231,8 @@ function App() {
 
               <p>
                 {filteredLeads.length}{" "}
-                {filteredLeads.length === 1 ? "lead" : "leads"} displayed
+                {filteredLeads.length === 1 ? "lead" : "leads"}{" "}
+                displayed
               </p>
             </div>
           </div>
@@ -218,13 +246,17 @@ function App() {
                 placeholder="Search by name, email, phone or source..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                aria-label="Search leads"
               />
             </div>
 
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) =>
+                setStatusFilter(event.target.value)
+              }
               className="status-filter"
+              aria-label="Filter leads by status"
             >
               <option value="all">All statuses</option>
               <option value="new">New</option>
@@ -251,7 +283,7 @@ function App() {
               <button
                 type="button"
                 className="retry-button"
-                onClick={fetchLeads}
+                onClick={() => void fetchLeads()}
               >
                 Try again
               </button>
@@ -267,6 +299,19 @@ function App() {
                   ? "Try changing your search or filters."
                   : "No leads have been created yet."}
               </p>
+
+              {(search || statusFilter !== "all") && (
+                <button
+                  type="button"
+                  className="retry-button"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("all");
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="table-wrapper">
@@ -292,7 +337,9 @@ function App() {
                           </div>
 
                           <div className="lead-name-wrapper">
-                            <span className="lead-name">{lead.name}</span>
+                            <span className="lead-name">
+                              {lead.name}
+                            </span>
 
                             <span className="lead-id">
                               {lead.id.slice(0, 8)}...
@@ -321,7 +368,7 @@ function App() {
 
                       <td>
                         <span
-                          className={`status-badge status-${lead.status}`}
+                          className={`status-badge status-${lead.status.toLowerCase()}`}
                         >
                           <span className="status-dot" />
                           {getStatusLabel(lead.status)}
