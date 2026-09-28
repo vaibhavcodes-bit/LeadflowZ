@@ -5,6 +5,10 @@ from app.main import app
 
 client = TestClient(app)
 
+WEBHOOK_HEADERS = {
+    "X-Webhook-Secret": "local-development-secret",
+}
+
 
 def test_meta_webhook_creates_lead():
     payload = {
@@ -19,6 +23,7 @@ def test_meta_webhook_creates_lead():
     response = client.post(
         "/api/webhook/meta-lead",
         json=payload,
+        headers=WEBHOOK_HEADERS,
     )
 
     assert response.status_code == 201
@@ -42,11 +47,13 @@ def test_meta_webhook_does_not_create_duplicate():
     first_response = client.post(
         "/api/webhook/meta-lead",
         json=payload,
+        headers=WEBHOOK_HEADERS,
     )
 
     second_response = client.post(
         "/api/webhook/meta-lead",
         json=payload,
+        headers=WEBHOOK_HEADERS,
     )
 
     assert first_response.status_code == 201
@@ -56,7 +63,26 @@ def test_meta_webhook_does_not_create_duplicate():
     second_data = second_response.json()
 
     assert first_data["id"] == second_data["id"]
+
     assert (
         first_data["external_lead_id"]
         == second_data["external_lead_id"]
     )
+
+
+def test_meta_webhook_rejects_invalid_secret():
+    payload = {
+        "external_lead_id": "meta-test-invalid-secret",
+        "name": "Invalid Secret User",
+        "email": "invalid@example.com",
+    }
+
+    response = client.post(
+        "/api/webhook/meta-lead",
+        json=payload,
+        headers={
+            "X-Webhook-Secret": "wrong-secret",
+        },
+    )
+
+    assert response.status_code == 401

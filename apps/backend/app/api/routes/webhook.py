@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -7,7 +7,10 @@ from app.services.lead import (
     create_lead_service,
     get_lead_by_external_id_service,
 )
+from app.core.config import get_settings
 
+
+settings = get_settings()
 
 router = APIRouter(
     prefix="/webhook",
@@ -31,7 +34,14 @@ def get_db():
 def receive_meta_lead(
     payload: MetaLeadWebhook,
     db: Session = Depends(get_db),
+    x_webhook_secret: str | None = Header(default=None),
 ):
+    if x_webhook_secret != settings.webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook secret",
+        )
+
     existing_lead = get_lead_by_external_id_service(
         db,
         payload.external_lead_id,
