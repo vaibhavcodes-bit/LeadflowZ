@@ -6,6 +6,8 @@ import {
   updateLeadStatus,
 } from "../api/leads";
 
+import { ActivityTimeline } from "./ActivityTimeline";
+
 import type { Lead } from "../types/lead";
 
 interface LeadDetailProps {
@@ -26,7 +28,13 @@ function formatDate(value?: string | null): string {
     return "—";
   }
 
-  return new Date(value).toLocaleString();
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString();
 }
 
 function getStatusClass(status: string): string {
@@ -53,36 +61,15 @@ export default function LeadDetail({
   const [source, setSource] = useState("");
   const [notes, setNotes] = useState("");
 
-  async function loadLead() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const data = await getLead(leadId);
-
-      setLead(data);
-
-      setName(data.name);
-      setEmail(data.email ?? "");
-      setPhone(data.phone ?? "");
-      setSource(data.source ?? "");
-      setNotes(data.notes ?? "");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load lead",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
     let cancelled = false;
 
     async function loadInitialLead() {
       try {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+
         const data = await getLead(leadId);
 
         if (cancelled) {
@@ -95,7 +82,6 @@ export default function LeadDetail({
         setPhone(data.phone ?? "");
         setSource(data.source ?? "");
         setNotes(data.notes ?? "");
-        setError(null);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -118,6 +104,31 @@ export default function LeadDetail({
     };
   }, [leadId]);
 
+  async function loadLead() {
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      const data = await getLead(leadId);
+
+      setLead(data);
+      setName(data.name);
+      setEmail(data.email ?? "");
+      setPhone(data.phone ?? "");
+      setSource(data.source ?? "");
+      setNotes(data.notes ?? "");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load lead",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSave() {
     try {
       setSaving(true);
@@ -125,11 +136,11 @@ export default function LeadDetail({
       setSuccess(null);
 
       const updatedLead = await updateLead(leadId, {
-            name,
-            email,
-            phone,
-            source,
-          });
+        name,
+        email,
+        phone,
+        source,
+      });
 
       setLead(updatedLead);
 
@@ -157,7 +168,7 @@ export default function LeadDetail({
   ) {
     const newStatus = event.target.value;
 
-    if (!lead || newStatus === lead.status) {
+    if (!lead || newStatus === lead.status.toLowerCase()) {
       return;
     }
 
@@ -236,6 +247,7 @@ export default function LeadDetail({
 
           <div>
             <h3>Unable to load lead</h3>
+
             <p>{error}</p>
 
             <button
@@ -257,6 +269,7 @@ export default function LeadDetail({
 
   return (
     <section className="lead-page">
+      {/* Top navigation */}
       <div className="detail-topbar">
         <button
           type="button"
@@ -267,9 +280,12 @@ export default function LeadDetail({
         </button>
       </div>
 
+      {/* Lead header */}
       <div className="detail-header">
         <div>
-          <span className="eyebrow">CRM / LEADS / DETAIL</span>
+          <span className="eyebrow">
+            CRM / LEADS / DETAIL
+          </span>
 
           <h1>{lead.name}</h1>
 
@@ -303,6 +319,7 @@ export default function LeadDetail({
         </div>
       </div>
 
+      {/* Messages */}
       {error && (
         <div className="detail-message error-message">
           {error}
@@ -315,7 +332,9 @@ export default function LeadDetail({
         </div>
       )}
 
+      {/* Main information */}
       <div className="detail-grid">
+        {/* Contact information */}
         <div className="detail-card">
           <div className="detail-card-header">
             <div>
@@ -380,6 +399,7 @@ export default function LeadDetail({
           </div>
         </div>
 
+        {/* Lead information */}
         <div className="detail-card">
           <div className="detail-card-header">
             <div>
@@ -451,6 +471,7 @@ export default function LeadDetail({
         </div>
       </div>
 
+      {/* Notes */}
       <div className="detail-card notes-card">
         <div className="detail-card-header">
           <div>
@@ -478,6 +499,7 @@ export default function LeadDetail({
         )}
       </div>
 
+      {/* Actions */}
       <div className="detail-actions">
         {editing ? (
           <>
@@ -513,6 +535,9 @@ export default function LeadDetail({
           </button>
         )}
       </div>
+
+      {/* Activity Timeline */}
+      <ActivityTimeline leadId={lead.id} />
     </section>
   );
 }

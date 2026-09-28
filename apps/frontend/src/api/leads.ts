@@ -1,5 +1,5 @@
 import type { Lead } from "../types/lead";
-
+import type { AuditLog } from "../types/auditLog";
 const API_BASE_URL = "http://localhost:8000/api";
 
 export async function getLeads(): Promise<Lead[]> {
@@ -71,6 +71,23 @@ export async function updateLeadStatus(
 
     throw new Error(
       message || "Failed to update lead status",
+    );
+  }
+
+  return response.json();
+}
+export async function getLeadAuditLogs(
+  leadId: string,
+): Promise<AuditLog[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/leads/${leadId}/audit-logs`,
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+
+    throw new Error(
+      message || "Failed to fetch lead activity",
     );
   }
 
