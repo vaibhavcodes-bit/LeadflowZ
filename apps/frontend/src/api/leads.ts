@@ -2,7 +2,8 @@ import type { AuditLog } from "../types/auditLog";
 import type { Lead, LeadStatus } from "../types/lead";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://localhost:8000/api";
 
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -12,13 +13,16 @@ async function request<T>(
   endpoint: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
+  const response = await fetch(
+    `${API_BASE_URL}${endpoint}`,
+    {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
     },
-  });
+  );
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -50,58 +54,22 @@ async function request<T>(
   return response.json() as Promise<T>;
 }
 
-/**
- * Normalizes different possible backend company field names
- * into the frontend's `company` property.
- */
-function normalizeLead(lead: any): Lead {
-  return {
-    id: lead.id,
-    name: lead.name ?? "",
-    email: lead.email ?? null,
-    phone: lead.phone ?? null,
-
-    company:
-      lead.company ??
-      lead.company_name ??
-      lead.companyName ??
-      null,
-
-    source: lead.source ?? null,
-
-    status: lead.status,
-
-    created_at: lead.created_at,
-
-    updated_at: lead.updated_at ?? null,
-
-    external_lead_id:
-      lead.external_lead_id ??
-      lead.externalLeadId ??
-      null,
-  };
-}
-
 export async function getLeads(): Promise<Lead[]> {
   const response = await request<
     Lead[] | { leads: Lead[] }
   >("/leads");
 
-  const leads = Array.isArray(response)
-    ? response
-    : response.leads || [];
+  if (Array.isArray(response)) {
+    return response;
+  }
 
-  return leads.map(normalizeLead);
+  return response.leads || [];
 }
 
 export async function getLead(
   leadId: string,
 ): Promise<Lead> {
-  const response = await request<Lead>(
-    `/leads/${leadId}`,
-  );
-
-  return normalizeLead(response);
+  return request<Lead>(`/leads/${leadId}`);
 }
 
 export async function getLeadAuditLogs(
@@ -122,7 +90,7 @@ export async function updateLeadStatus(
   leadId: string,
   status: LeadStatus,
 ): Promise<Lead> {
-  const response = await request<Lead>(
+  return request<Lead>(
     `/leads/${leadId}/status`,
     {
       method: "PATCH",
@@ -131,6 +99,4 @@ export async function updateLeadStatus(
       }),
     },
   );
-
-  return normalizeLead(response);
 }
