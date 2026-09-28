@@ -1,6 +1,8 @@
 import type { Lead } from "../types/lead";
 import type { AuditLog } from "../types/auditLog";
-const API_BASE_URL = "http://localhost:8000/api";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
 export async function getLeads(): Promise<Lead[]> {
   const response = await fetch(`${API_BASE_URL}/leads`);
@@ -11,7 +13,6 @@ export async function getLeads(): Promise<Lead[]> {
 
   return response.json();
 }
-
 export async function getLead(id: string): Promise<Lead> {
   const response = await fetch(`${API_BASE_URL}/leads/${id}`);
 
