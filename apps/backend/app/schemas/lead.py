@@ -1,7 +1,18 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+
+# Allowed lead pipeline statuses
+LeadStatus = Literal[
+    "new",
+    "contacted",
+    "qualified",
+    "converted",
+    "lost",
+]
 
 
 class LeadCreate(BaseModel):
@@ -9,7 +20,7 @@ class LeadCreate(BaseModel):
     name: str
     email: str | None = None
     phone: str | None = None
-    status: str = "new"
+    status: LeadStatus = "new"
     source: str | None = None
     notes: str | None = None
 
@@ -23,7 +34,7 @@ class LeadUpdate(BaseModel):
 
 
 class LeadStatusUpdate(BaseModel):
-    status: str
+    status: LeadStatus
 
 
 class LeadResponse(BaseModel):
@@ -34,7 +45,7 @@ class LeadResponse(BaseModel):
     name: str
     email: str | None
     phone: str | None
-    status: str
+    status: LeadStatus
     source: str | None
     notes: str | None
     created_at: datetime
