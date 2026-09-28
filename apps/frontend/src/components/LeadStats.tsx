@@ -4,61 +4,96 @@ interface LeadStatsProps {
   leads: Lead[];
 }
 
-export function LeadStats({ leads }: LeadStatsProps) {
+interface StatCardProps {
+  label: string;
+  value: number;
+  description: string;
+  icon: string;
+  className?: string;
+}
+
+function StatCard({
+  label,
+  value,
+  description,
+  icon,
+  className = "",
+}: StatCardProps) {
+  return (
+    <article
+      className={`stat-card ${className}`.trim()}
+    >
+      <div className="stat-card-top">
+        <span className="stat-label">
+          {label}
+        </span>
+
+        <span
+          className="stat-icon"
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+      </div>
+
+      <strong className="stat-value">
+        {value}
+      </strong>
+
+      <span className="stat-description">
+        {description}
+      </span>
+    </article>
+  );
+}
+
+export default function LeadStats({
+  leads,
+}: LeadStatsProps) {
+  const getStatusCount = (status: string) =>
+    leads.filter(
+      (lead) =>
+        String(lead.status).toLowerCase() ===
+        status.toLowerCase(),
+    ).length;
+
   const total = leads.length;
-
-  const newLeads = leads.filter(
-    (lead) => lead.status.toLowerCase() === "new",
-  ).length;
-
-  const qualified = leads.filter(
-    (lead) => lead.status.toLowerCase() === "qualified",
-  ).length;
-
-  const converted = leads.filter(
-    (lead) => lead.status.toLowerCase() === "converted",
-  ).length;
-
-  const stats = [
-    {
-      label: "Total Leads",
-      value: total,
-      description: "All incoming leads",
-      icon: "◉",
-    },
-    {
-      label: "New",
-      value: newLeads,
-      description: "Needs attention",
-      icon: "+",
-    },
-    {
-      label: "Qualified",
-      value: qualified,
-      description: "Sales qualified",
-      icon: "✓",
-    },
-    {
-      label: "Converted",
-      value: converted,
-      description: "Successfully converted",
-      icon: "↗",
-    },
-  ];
+  const newLeads = getStatusCount("new");
+  const qualified = getStatusCount("qualified");
+  const converted = getStatusCount("converted");
 
   return (
-    <div className="stats-grid">
-      {stats.map((stat) => (
-        <div className="stat-card" key={stat.label}>
-          <div>
-            <p className="stat-label">{stat.label}</p>
-            <p className="stat-value">{stat.value}</p>
-            <p className="stat-description">{stat.description}</p>
-          </div>
+    <section
+      className="stats-grid"
+      aria-label="Lead statistics"
+    >
+      <StatCard
+        label="Total Leads"
+        value={total}
+        description="All incoming leads"
+        icon="◎"
+      />
 
-          <div className="stat-icon">{stat.icon}</div>
-        </div>
-      ))}
-    </div>
+      <StatCard
+        label="New"
+        value={newLeads}
+        description="Needs attention"
+        icon="✦"
+      />
+
+      <StatCard
+        label="Qualified"
+        value={qualified}
+        description="Sales qualified"
+        icon="✓"
+      />
+
+      <StatCard
+        label="Converted"
+        value={converted}
+        description="Successfully converted"
+        icon="↗"
+      />
+    </section>
   );
 }

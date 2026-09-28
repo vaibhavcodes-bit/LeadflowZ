@@ -1,21 +1,65 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { getLeads } from "../api/leads";
-import { LeadStats } from "../components/LeadStats";
-import { LeadTable } from "../components/LeadTable";
+
+import LeadStats from "./LeadStats";
+import LeadTable from "./LeadTable";
+
 import type { Lead } from "../types/lead";
 
-export default function LeadList() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface LeadListProps {
+  onOpenLead: (leadId: string) => void;
+}
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+const STATUS_OPTIONS = [
+  {
+    value: "all",
+    label: "All statuses",
+  },
+  {
+    value: "new",
+    label: "New",
+  },
+  {
+    value: "contacted",
+    label: "Contacted",
+  },
+  {
+    value: "qualified",
+    label: "Qualified",
+  },
+  {
+    value: "converted",
+    label: "Converted",
+  },
+  {
+    value: "lost",
+    label: "Lost",
+  },
+];
 
-  /*
-   * Used by the Refresh and Try Again buttons.
-   */
+export default function LeadList({
+  onOpenLead,
+}: LeadListProps) {
+  const [leads, setLeads] =
+    useState<Lead[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState("all");
+
   async function loadLeads() {
     try {
       setLoading(true);
@@ -23,136 +67,149 @@ export default function LeadList() {
 
       const data = await getLeads();
 
-      setLeads(data);
+      setLeads(
+        Array.isArray(data) ? data : [],
+      );
     } catch (err) {
+      console.error(
+        "Failed to load leads:",
+        err,
+      );
+
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to load leads",
+          : "Failed to load leads.",
       );
     } finally {
       setLoading(false);
     }
   }
 
-  /*
-   * Initial API request.
-   *
-   * The cancelled flag prevents state updates if the
-   * component unmounts before the API request completes.
-   */
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadInitialLeads() {
-      try {
-        const data = await getLeads();
-
-        if (!cancelled) {
-          setLeads(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load leads",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadInitialLeads();
-
-    return () => {
-      cancelled = true;
-    };
+    void loadLeads();
   }, []);
 
-  /*
-   * Search + status filtering.
-   */
   const filteredLeads = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = search
+      .trim()
+      .toLowerCase();
 
     return leads.filter((lead) => {
+      const searchableText = [
+        lead.name,
+        lead.email,
+        lead.phone,
+        lead.source,
+        lead.company,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
       const matchesSearch =
         !query ||
-        lead.name.toLowerCase().includes(query) ||
-        (lead.email ?? "").toLowerCase().includes(query) ||
-        (lead.phone ?? "").toLowerCase().includes(query) ||
-        (lead.source ?? "").toLowerCase().includes(query);
+        searchableText.includes(query);
 
       const matchesStatus =
         statusFilter === "all" ||
-        lead.status.toLowerCase() === statusFilter;
+        String(lead.status).toLowerCase() ===
+          statusFilter.toLowerCase();
 
-      return matchesSearch && matchesStatus;
+      return (
+        matchesSearch &&
+        matchesStatus
+      );
     });
-  }, [leads, search, statusFilter]);
+  }, [
+    leads,
+    search,
+    statusFilter,
+  ]);
+
+  function clearFilters() {
+    setSearch("");
+    setStatusFilter("all");
+  }
 
   /*
-   * Loading state.
+   * LOADING
    */
   if (loading) {
     return (
       <section className="lead-page">
-        <div className="lead-header">
+        <header className="page-header">
           <div>
-            <span className="eyebrow">CRM / LEADS</span>
+            <span className="eyebrow">
+              CRM / LEADS
+            </span>
 
             <h1>Leads</h1>
 
             <p>
-              Manage, track and follow up with your incoming leads.
+              Manage, track and follow up with
+              your incoming leads.
             </p>
           </div>
-        </div>
+        </header>
 
         <div className="state-card">
           <div className="loading-spinner" />
 
-          <p>Loading leads...</p>
+          <h3>Loading leads...</h3>
+
+          <p>
+            Please wait while we fetch your
+            latest leads.
+          </p>
         </div>
       </section>
     );
   }
 
   /*
-   * Error state.
+   * ERROR
    */
   if (error) {
     return (
       <section className="lead-page">
-        <div className="lead-header">
+        <header className="page-header">
           <div>
-            <span className="eyebrow">CRM / LEADS</span>
+            <span className="eyebrow">
+              CRM / LEADS
+            </span>
 
             <h1>Leads</h1>
 
             <p>
-              Manage, track and follow up with your incoming leads.
+              Manage, track and follow up with
+              your incoming leads.
             </p>
           </div>
-        </div>
+        </header>
 
         <div className="state-card error-state">
-          <div className="state-icon">!</div>
+          <div className="state-icon">
+            !
+          </div>
 
           <div>
-            <h3>Unable to load leads</h3>
+            <span className="eyebrow">
+              ERROR
+            </span>
+
+            <h3>
+              Unable to load leads
+            </h3>
 
             <p>{error}</p>
 
             <button
               type="button"
               className="refresh-button"
-              onClick={() => void loadLeads()}
+              onClick={() =>
+                void loadLeads()
+              }
             >
               ↻ Try again
             </button>
@@ -162,49 +219,79 @@ export default function LeadList() {
     );
   }
 
-  /*
-   * Main Lead List UI.
-   */
   return (
     <section className="lead-page">
-      {/* Page Header */}
-      <div className="lead-header">
+      {/* ===========================
+          PAGE HEADER
+      ============================ */}
+
+      <header className="page-header">
         <div>
-          <span className="eyebrow">CRM / LEADS</span>
+          <span className="eyebrow">
+            CRM / LEADS
+          </span>
 
           <h1>Leads</h1>
 
           <p>
-            Manage, track and follow up with your incoming leads.
+            Manage, track and follow up with
+            your incoming leads.
           </p>
         </div>
 
         <button
           type="button"
           className="refresh-button"
-          onClick={() => void loadLeads()}
+          onClick={() =>
+            void loadLeads()
+          }
+          disabled={loading}
         >
-          ↻ Refresh
-        </button>
-      </div>
+          <span aria-hidden="true">
+            ↻
+          </span>
 
-      {/* Lead Statistics */}
+          Refresh
+        </button>
+      </header>
+
+      {/* ===========================
+          STATISTICS
+      ============================ */}
+
       <LeadStats leads={leads} />
 
-      {/* Lead Section */}
-      <div className="lead-section">
-        {/* Section Header */}
+      {/* ===========================
+          LEADS PANEL
+      ============================ */}
+
+      <section className="leads-panel">
         <div className="section-header">
           <div>
+            <span className="eyebrow">
+              PIPELINE
+            </span>
+
             <h2>All Leads</h2>
 
             <p>
-              {filteredLeads.length} of {leads.length} leads displayed
+              Showing{" "}
+              <strong>
+                {filteredLeads.length}
+              </strong>{" "}
+              of{" "}
+              <strong>
+                {leads.length}
+              </strong>{" "}
+              leads
             </p>
           </div>
         </div>
 
-        {/* Search + Filter */}
+        {/* ===========================
+            TOOLBAR
+        ============================ */}
+
         <div className="lead-toolbar">
           <div className="search-box">
             <span
@@ -216,63 +303,93 @@ export default function LeadList() {
 
             <input
               type="search"
-              placeholder="Search by name, email, phone or source..."
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by name, email, phone, company or source..."
+              onChange={(event) =>
+                setSearch(
+                  event.target.value,
+                )
+              }
               aria-label="Search leads"
             />
+
+            {search && (
+              <button
+                type="button"
+                className="clear-search"
+                onClick={() =>
+                  setSearch("")
+                }
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
           </div>
 
           <select
             className="status-filter"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(event) =>
+              setStatusFilter(
+                event.target.value,
+              )
+            }
             aria-label="Filter leads by status"
           >
-            <option value="all">All statuses</option>
-            <option value="new">New</option>
-            <option value="qualified">Qualified</option>
-            <option value="contacted">Contacted</option>
-            <option value="converted">Converted</option>
-            <option value="lost">Lost</option>
+            {STATUS_OPTIONS.map(
+              (option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ),
+            )}
           </select>
         </div>
 
-        {/* Empty State / Table */}
-        {filteredLeads.length === 0 ? (
+        {/* ===========================
+            TABLE / EMPTY STATE
+        ============================ */}
+
+        {filteredLeads.length > 0 ? (
+          <LeadTable
+            leads={filteredLeads}
+            onOpenLead={onOpenLead}
+          />
+        ) : (
           <div className="state-card empty-state">
-            <div
-              className="state-icon"
-              aria-hidden="true"
-            >
+            <div className="state-icon">
               ⌕
             </div>
 
-            <h3>No leads found</h3>
+            <h3>
+              No leads found
+            </h3>
 
             <p>
-              {search || statusFilter !== "all"
-                ? "Try changing your search or status filter."
+              {search ||
+              statusFilter !== "all"
+                ? "No leads match your current filters."
                 : "There are currently no leads to display."}
             </p>
 
-            {(search || statusFilter !== "all") && (
+            {(search ||
+              statusFilter !==
+                "all") && (
               <button
                 type="button"
                 className="refresh-button"
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter("all");
-                }}
+                onClick={clearFilters}
               >
                 Clear filters
               </button>
             )}
           </div>
-        ) : (
-          <LeadTable leads={filteredLeads} />
         )}
-      </div>
+      </section>
     </section>
   );
 }

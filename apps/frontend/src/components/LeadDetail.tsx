@@ -1,29 +1,33 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 import {
   getLead,
-  updateLead,
+  getLeadAuditLogs,
   updateLeadStatus,
 } from "../api/leads";
 
-import { ActivityTimeline } from "./ActivityTimeline";
+import type {
+  Lead,
+  LeadStatus,
+} from "../types/lead";
 
-import type { Lead } from "../types/lead";
+import type {
+  AuditLog,
+} from "../types/auditLog";
+
+import StatusBadge from "./StatusBadge";
 
 interface LeadDetailProps {
   leadId: string;
   onBack: () => void;
 }
 
-const STATUS_OPTIONS = [
-  "new",
-  "contacted",
-  "qualified",
-  "converted",
-  "lost",
-];
-
-function formatDate(value?: string | null): string {
+function formatDateTime(
+  value?: string | null,
+): string {
   if (!value) {
     return "—";
   }
@@ -34,187 +38,338 @@ function formatDate(value?: string | null): string {
     return "—";
   }
 
-  return date.toLocaleString();
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  ).format(date);
 }
 
-function getStatusClass(status: string): string {
-  return `status-badge status-${status.toLowerCase()}`;
+function formatEventType(
+  value?: string | null,
+): string {
+  if (!value) {
+    return "Activity";
+  }
+
+  switch (value.toLowerCase()) {
+    case "lead_created":
+      return "Lead Created";
+
+    case "lead_updated":
+      return "Lead Updated";
+
+    case "lead_status_changed":
+      return "Status Changed";
+
+    case "status_changed":
+      return "Status Changed";
+
+    default:
+      return value
+        .replace(/[_-]/g, " ")
+        .replace(/\b\w/g, (letter) =>
+          letter.toUpperCase(),
+        );
+  }
+}
+
+function getInitials(
+  name?: string | null,
+): string {
+  if (!name) {
+    return "L";
+  }
+
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return initials || "L";
+}
+
+function getEventDescription(
+  log: AuditLog,
+): string {
+  const rawLog = log as AuditLog & {
+    description?: string | null;
+    message?: string | null;
+    details?: Record<string, unknown> | null;
+  };
+
+  /*
+   * Your backend currently returns `description`.
+   */
+  if (rawLog.description) {
+    return rawLog.description;
+  }
+
+  /*
+   * Support `message` as well in case
+   * the backend schema changes later.
+   */
+  if (rawLog.message) {
+    return rawLog.message;
+  }
+
+  const eventType =
+    String(
+      rawLog.event_type ?? "",
+    ).toLowerCase();
+
+  switch (eventType) {
+    case "lead_created":
+      return "Lead was created.";
+
+    case "lead_updated":
+      return "Lead information was updated.";
+
+    case "lead_status_changed":
+    case "status_changed":
+      return "Lead status was changed.";
+
+    default:
+      return "Lead activity was recorded.";
+  }
+}
+
+function getEventIcon(
+  eventType?: string | null,
+): string {
+  switch (
+    eventType?.toLowerCase()
+  ) {
+    case "lead_created":
+      return "+";
+
+    case "lead_updated":
+      return "✎";
+
+    case "lead_status_changed":
+    case "status_changed":
+      return "✓";
+
+    default:
+      return "•";
+  }
 }
 
 export default function LeadDetail({
   leadId,
   onBack,
 }: LeadDetailProps) {
-  const [lead, setLead] = useState<Lead | null>(null);
+  const [lead, setLead] =
+    useState<Lead | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [logs, setLogs] =
+    useState<AuditLog[]>([]);
 
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [editing, setEditing] = useState(false);
+  const [auditLoading, setAuditLoading] =
+    useState(true);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [source, setSource] = useState("");
-  const [notes, setNotes] = useState("");
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [updating, setUpdating] =
+    useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadInitialLead() {
+    async function loadLead() {
+      if (!leadId) {
+        setError("Lead ID is missing.");
+        setLoading(false);
+        setAuditLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
+        setAuditLoading(true);
         setError(null);
-        setSuccess(null);
 
-        const data = await getLead(leadId);
+        /*
+         * Load lead first.
+         */
+        const leadData =
+          await getLead(leadId);
 
         if (cancelled) {
           return;
         }
 
-        setLead(data);
-        setName(data.name);
-        setEmail(data.email ?? "");
-        setPhone(data.phone ?? "");
-        setSource(data.source ?? "");
-        setNotes(data.notes ?? "");
-      } catch (err) {
-        if (!cancelled) {
+        setLead(leadData);
+        setLoading(false);
+
+        /*
+         * Load audit logs separately.
+         *
+         * Audit failure must not break
+         * the lead detail page.
+         */
+        try {
+          const auditData =
+            await getLeadAuditLogs(
+              leadId,
+            );
+
+          if (!cancelled) {
+            setLogs(
+              Array.isArray(auditData)
+                ? auditData
+                : [],
+            );
+          }
+        } catch (auditError) {
+          console.warn(
+            "Unable to load audit history:",
+            auditError,
+          );
+
+          if (!cancelled) {
+            setLogs([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setAuditLoading(false);
+          }
+        }
+      } catch (loadError) {
+        console.error(
+          "Failed to load lead:",
+          loadError,
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          loadError instanceof Error
+        ) {
           setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load lead",
+            loadError.message,
+          );
+        } else {
+          setError(
+            "Unable to load lead.",
           );
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+
+        setLoading(false);
+        setAuditLoading(false);
       }
     }
 
-    void loadInitialLead();
+    void loadLead();
 
     return () => {
       cancelled = true;
     };
   }, [leadId]);
 
-  async function loadLead() {
-    try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-
-      const data = await getLead(leadId);
-
-      setLead(data);
-      setName(data.name);
-      setEmail(data.email ?? "");
-      setPhone(data.phone ?? "");
-      setSource(data.source ?? "");
-      setNotes(data.notes ?? "");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load lead",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSave() {
-    try {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
-
-      const updatedLead = await updateLead(leadId, {
-        name,
-        email,
-        phone,
-        source,
-      });
-
-      setLead(updatedLead);
-
-      setName(updatedLead.name);
-      setEmail(updatedLead.email ?? "");
-      setPhone(updatedLead.phone ?? "");
-      setSource(updatedLead.source ?? "");
-      setNotes(updatedLead.notes ?? "");
-
-      setEditing(false);
-      setSuccess("Lead updated successfully.");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update lead",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleStatusChange(
     event: React.ChangeEvent<HTMLSelectElement>,
   ) {
-    const newStatus = event.target.value;
-
-    if (!lead || newStatus === lead.status.toLowerCase()) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
-
-      const updatedLead = await updateLeadStatus(
-        leadId,
-        newStatus,
-      );
-
-      setLead(updatedLead);
-
-      setSuccess("Lead status updated successfully.");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update lead status",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleCancelEdit() {
     if (!lead) {
       return;
     }
 
-    setName(lead.name);
-    setEmail(lead.email ?? "");
-    setPhone(lead.phone ?? "");
-    setSource(lead.source ?? "");
-    setNotes(lead.notes ?? "");
+    const nextStatus =
+      event.target.value as LeadStatus;
 
-    setEditing(false);
-    setError(null);
-    setSuccess(null);
+    if (
+      nextStatus === lead.status
+    ) {
+      return;
+    }
+
+    const previousStatus =
+      lead.status;
+
+    try {
+      setUpdating(true);
+      setError(null);
+
+      const updatedLead =
+        await updateLeadStatus(
+          lead.id,
+          nextStatus,
+        );
+
+      setLead(updatedLead);
+
+      /*
+       * Reload audit history so the
+       * status change immediately appears.
+       */
+      try {
+        const updatedLogs =
+          await getLeadAuditLogs(
+            lead.id,
+          );
+
+        setLogs(
+          Array.isArray(updatedLogs)
+            ? updatedLogs
+            : [],
+        );
+      } catch (auditError) {
+        console.warn(
+          "Audit history could not be refreshed:",
+          auditError,
+        );
+      }
+    } catch (updateError) {
+      console.error(
+        "Failed to update lead status:",
+        updateError,
+      );
+
+      /*
+       * Keep UI state consistent if
+       * the update failed.
+       */
+      setLead({
+        ...lead,
+        status: previousStatus,
+      });
+
+      if (
+        updateError instanceof Error
+      ) {
+        setError(
+          updateError.message,
+        );
+      } else {
+        setError(
+          "Failed to update lead status.",
+        );
+      }
+    } finally {
+      setUpdating(false);
+    }
   }
 
+  /*
+   * Loading
+   */
   if (loading) {
     return (
-      <section className="lead-page">
+      <div className="lead-detail-page">
         <button
           type="button"
           className="back-button"
@@ -223,54 +378,71 @@ export default function LeadDetail({
           ← Back to Leads
         </button>
 
-        <div className="state-card">
-          <div className="loading-spinner" />
-          <p>Loading lead...</p>
-        </div>
-      </section>
-    );
-  }
+        <section className="detail-card">
+          <div className="loading-state">
+            <div className="loading-spinner" />
 
-  if (error && !lead) {
-    return (
-      <section className="lead-page">
-        <button
-          type="button"
-          className="back-button"
-          onClick={onBack}
-        >
-          ← Back to Leads
-        </button>
+            <h2>
+              Loading lead...
+            </h2>
 
-        <div className="state-card error-state">
-          <div className="state-icon">!</div>
-
-          <div>
-            <h3>Unable to load lead</h3>
-
-            <p>{error}</p>
-
-            <button
-              type="button"
-              className="refresh-button"
-              onClick={() => void loadLead()}
-            >
-              Try again
-            </button>
+            <p>
+              Please wait while we load
+              the lead information.
+            </p>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     );
   }
 
-  if (!lead) {
-    return null;
+  /*
+   * Error
+   */
+  if (error || !lead) {
+    return (
+      <div className="lead-detail-page">
+        <button
+          type="button"
+          className="back-button"
+          onClick={onBack}
+        >
+          ← Back to Leads
+        </button>
+
+        <section className="detail-card error-card">
+          <span className="eyebrow">
+            LEAD DETAILS
+          </span>
+
+          <h2>
+            Unable to load lead
+          </h2>
+
+          <p>
+            {error ||
+              "Lead was not found."}
+          </p>
+        </section>
+      </div>
+    );
   }
+
+  const externalLeadId =
+    (
+      lead as Lead & {
+        external_lead_id?: string | null;
+      }
+    ).external_lead_id;
 
   return (
-    <section className="lead-page">
-      {/* Top navigation */}
-      <div className="detail-topbar">
+    <div className="lead-detail-page">
+
+      {/* =====================================
+          TOP NAVIGATION
+      ====================================== */}
+
+      <div className="detail-page-header">
         <button
           type="button"
           className="back-button"
@@ -280,264 +452,418 @@ export default function LeadDetail({
         </button>
       </div>
 
-      {/* Lead header */}
-      <div className="detail-header">
-        <div>
-          <span className="eyebrow">
-            CRM / LEADS / DETAIL
-          </span>
+      {/* =====================================
+          HERO
+      ====================================== */}
 
-          <h1>{lead.name}</h1>
+      <section className="detail-card lead-hero-card">
+        <div className="lead-hero">
 
-          <p>
-            Lead created {formatDate(lead.created_at)}
-          </p>
+          <div className="avatar avatar-large">
+            {getInitials(
+              lead.name,
+            )}
+          </div>
+
+          <div className="lead-hero-content">
+            <span className="eyebrow">
+              LEAD DETAILS
+            </span>
+
+            <h1>
+              {lead.name ||
+                "Unnamed Lead"}
+            </h1>
+
+            <div className="lead-meta">
+              <span>
+                ID: {lead.id}
+              </span>
+
+              <span className="meta-separator">
+                •
+              </span>
+
+              <span>
+                Created{" "}
+                {formatDateTime(
+                  lead.created_at,
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div className="lead-hero-status">
+            <StatusBadge
+              status={lead.status}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* =====================================
+          STATUS
+      ====================================== */}
+
+      <section className="detail-card">
+        <div className="card-header">
+          <div>
+            <span className="eyebrow">
+              PIPELINE
+            </span>
+
+            <h2>
+              Lead Status
+            </h2>
+          </div>
         </div>
 
-        <div className="detail-status">
-          <label htmlFor="lead-status">
-            Status
-          </label>
+        <div className="status-control">
+          <div className="status-control-label">
+            <label htmlFor="lead-status">
+              Current status
+            </label>
+
+            <span>
+              Change the current pipeline
+              stage for this lead.
+            </span>
+          </div>
 
           <select
             id="lead-status"
-            className={getStatusClass(lead.status)}
-            value={lead.status.toLowerCase()}
-            onChange={handleStatusChange}
-            disabled={saving}
+            value={lead.status}
+            onChange={
+              handleStatusChange
+            }
+            disabled={updating}
           >
-            {STATUS_OPTIONS.map((status) => (
-              <option
-                value={status}
-                key={status}
-              >
-                {status.charAt(0).toUpperCase() +
-                  status.slice(1)}
-              </option>
-            ))}
+            <option value="new">
+              New
+            </option>
+
+            <option value="contacted">
+              Contacted
+            </option>
+
+            <option value="qualified">
+              Qualified
+            </option>
+
+            <option value="converted">
+              Converted
+            </option>
+
+            <option value="lost">
+              Lost
+            </option>
           </select>
+
+          {updating && (
+            <span className="status-updating">
+              Updating...
+            </span>
+          )}
         </div>
-      </div>
 
-      {/* Messages */}
-      {error && (
-        <div className="detail-message error-message">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="detail-message success-message">
-          {success}
-        </div>
-      )}
-
-      {/* Main information */}
-      <div className="detail-grid">
-        {/* Contact information */}
-        <div className="detail-card">
-          <div className="detail-card-header">
-            <div>
-              <span className="eyebrow">
-                CONTACT
-              </span>
-
-              <h2>Contact Information</h2>
-            </div>
+        {error && (
+          <div className="inline-error">
+            {error}
           </div>
+        )}
+      </section>
 
-          <div className="detail-fields">
-            <div className="detail-field">
-              <span>Name</span>
+      {/* =====================================
+          CONTACT INFORMATION
+      ====================================== */}
 
-              {editing ? (
-                <input
-                  value={name}
-                  onChange={(event) =>
-                    setName(event.target.value)
-                  }
-                />
-              ) : (
-                <strong>{lead.name}</strong>
-              )}
-            </div>
+      <section className="detail-card">
+        <div className="card-header">
+          <div>
+            <span className="eyebrow">
+              CONTACT
+            </span>
 
-            <div className="detail-field">
-              <span>Email</span>
-
-              {editing ? (
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) =>
-                    setEmail(event.target.value)
-                  }
-                />
-              ) : (
-                <strong>
-                  {lead.email || "Not provided"}
-                </strong>
-              )}
-            </div>
-
-            <div className="detail-field">
-              <span>Phone</span>
-
-              {editing ? (
-                <input
-                  value={phone}
-                  onChange={(event) =>
-                    setPhone(event.target.value)
-                  }
-                />
-              ) : (
-                <strong>
-                  {lead.phone || "Not provided"}
-                </strong>
-              )}
-            </div>
+            <h2>
+              Contact Information
+            </h2>
           </div>
         </div>
 
-        {/* Lead information */}
-        <div className="detail-card">
-          <div className="detail-card-header">
-            <div>
-              <span className="eyebrow">
-                LEAD DETAILS
-              </span>
+        <div className="details-grid">
 
-              <h2>Lead Information</h2>
-            </div>
+          <div className="detail-field">
+            <span className="field-label">
+              Full Name
+            </span>
+
+            <strong>
+              {lead.name || "—"}
+            </strong>
           </div>
 
-          <div className="detail-fields">
-            <div className="detail-field">
-              <span>Source</span>
+          <div className="detail-field">
+            <span className="field-label">
+              Email
+            </span>
 
-              {editing ? (
-                <input
-                  value={source}
-                  onChange={(event) =>
-                    setSource(event.target.value)
-                  }
-                />
-              ) : (
-                <strong>
-                  {lead.source || "Not provided"}
-                </strong>
-              )}
-            </div>
+            <strong>
+              {lead.email || "—"}
+            </strong>
+          </div>
 
-            <div className="detail-field">
-              <span>Status</span>
+          <div className="detail-field">
+            <span className="field-label">
+              Phone
+            </span>
 
-              <strong>
-                <span
-                  className={getStatusClass(
-                    lead.status,
-                  )}
-                >
-                  {lead.status}
-                </span>
-              </strong>
-            </div>
+            <strong>
+              {lead.phone || "—"}
+            </strong>
+          </div>
 
-            <div className="detail-field">
-              <span>External Lead ID</span>
+          <div className="detail-field">
+            <span className="field-label">
+              Source
+            </span>
 
-              <strong>
-                {lead.external_lead_id ||
-                  "Not provided"}
-              </strong>
-            </div>
+            <strong>
+              {lead.source ||
+                "Unknown"}
+            </strong>
+          </div>
 
-            <div className="detail-field">
-              <span>Created</span>
+        </div>
+      </section>
 
-              <strong>
-                {formatDate(lead.created_at)}
-              </strong>
-            </div>
+      {/* =====================================
+          LEAD INFORMATION
+      ====================================== */}
 
-            <div className="detail-field">
-              <span>Last Updated</span>
+      <section className="detail-card">
+        <div className="card-header">
+          <div>
+            <span className="eyebrow">
+              INFORMATION
+            </span>
 
-              <strong>
-                {formatDate(lead.updated_at)}
-              </strong>
-            </div>
+            <h2>
+              Lead Information
+            </h2>
           </div>
         </div>
-      </div>
 
-      {/* Notes */}
-      <div className="detail-card notes-card">
-        <div className="detail-card-header">
+        <div className="details-grid">
+
+          <div className="detail-field">
+            <span className="field-label">
+              Lead ID
+            </span>
+
+            <strong className="break-word">
+              {lead.id}
+            </strong>
+          </div>
+
+          <div className="detail-field">
+            <span className="field-label">
+              External Lead ID
+            </span>
+
+            <strong className="break-word">
+              {externalLeadId ||
+                "—"}
+            </strong>
+          </div>
+
+          <div className="detail-field">
+            <span className="field-label">
+              Created
+            </span>
+
+            <strong>
+              {formatDateTime(
+                lead.created_at,
+              )}
+            </strong>
+          </div>
+
+          <div className="detail-field">
+            <span className="field-label">
+              Last Updated
+            </span>
+
+            <strong>
+              {formatDateTime(
+                lead.updated_at ||
+                  lead.created_at,
+              )}
+            </strong>
+          </div>
+
+        </div>
+      </section>
+
+      {/* =====================================
+          NOTES
+      ====================================== */}
+
+      <section className="detail-card">
+        <div className="card-header">
           <div>
             <span className="eyebrow">
               NOTES
             </span>
 
-            <h2>Lead Notes</h2>
+            <h2>
+              Notes
+            </h2>
           </div>
         </div>
 
-        {editing ? (
-          <textarea
-            value={notes}
-            onChange={(event) =>
-              setNotes(event.target.value)
-            }
-            placeholder="Add notes about this lead..."
-            rows={6}
-          />
-        ) : (
-          <p className="lead-notes">
-            {lead.notes || "No notes added yet."}
+        <div className="notes-section">
+          <p>
+            No notes have been added
+            for this lead.
           </p>
-        )}
-      </div>
+        </div>
+      </section>
 
-      {/* Actions */}
-      <div className="detail-actions">
-        {editing ? (
-          <>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleCancelEdit}
-              disabled={saving}
-            >
-              Cancel
-            </button>
+      {/* =====================================
+          ACTIVITY TIMELINE
+      ====================================== */}
 
-            <button
-              type="button"
-              className="refresh-button"
-              onClick={() => void handleSave()}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </button>
-          </>
+      <section className="detail-card activity-card">
+        <div className="card-header">
+          <div>
+            <span className="eyebrow">
+              ACTIVITY
+            </span>
+
+            <h2>
+              Activity Timeline
+            </h2>
+          </div>
+
+          {!auditLoading &&
+            logs.length > 0 && (
+              <span className="activity-count">
+                {logs.length}{" "}
+                {logs.length === 1
+                  ? "event"
+                  : "events"}
+              </span>
+            )}
+        </div>
+
+        {auditLoading ? (
+          <div className="activity-loading">
+            <div className="loading-spinner" />
+
+            <p>
+              Loading activity history...
+            </p>
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">
+              ◷
+            </div>
+
+            <h3>
+              No activity yet
+            </h3>
+
+            <p>
+              Changes to this lead
+              will appear here.
+            </p>
+          </div>
         ) : (
-          <button
-            type="button"
-            className="refresh-button"
-            onClick={() => {
-              setSuccess(null);
-              setError(null);
-              setEditing(true);
-            }}
-          >
-            Edit Lead
-          </button>
+          <div className="activity-timeline">
+
+            {logs.map(
+              (log, index) => {
+                const rawLog =
+                  log as AuditLog & {
+                    id?: string;
+                    event_type?: string;
+                    created_at?: string;
+                    description?: string;
+                    message?: string;
+                  };
+
+                const eventType =
+                  rawLog.event_type ||
+                  "";
+
+                const createdAt =
+                  rawLog.created_at ||
+                  null;
+
+                return (
+                  <div
+                    className="activity-item"
+                    key={
+                      rawLog.id ||
+                      `${eventType}-${createdAt}-${index}`
+                    }
+                  >
+
+                    <div className="activity-marker">
+                      <span>
+                        {getEventIcon(
+                          eventType,
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="activity-content">
+
+                      <div className="activity-top">
+                        <strong>
+                          {formatEventType(
+                            eventType,
+                          )}
+                        </strong>
+
+                        <time>
+                          {formatDateTime(
+                            createdAt,
+                          )}
+                        </time>
+                      </div>
+
+                      <p>
+                        {getEventDescription(
+                          log,
+                        )}
+                      </p>
+
+                    </div>
+                  </div>
+                );
+              },
+            )}
+
+          </div>
         )}
+      </section>
+
+      {/* =====================================
+          FOOTER
+      ====================================== */}
+
+      <div className="detail-footer">
+        <button
+          type="button"
+          className="back-button"
+          onClick={onBack}
+        >
+          ← Back to Leads
+        </button>
       </div>
 
-      {/* Activity Timeline */}
-      <ActivityTimeline leadId={lead.id} />
-    </section>
+    </div>
   );
 }

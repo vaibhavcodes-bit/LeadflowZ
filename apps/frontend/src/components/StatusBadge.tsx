@@ -1,50 +1,24 @@
-import type { Lead } from "../types/lead";
+import type { LeadStatus } from "../types/lead";
 
 interface StatusBadgeProps {
-  status: Lead["status"];
+  status: LeadStatus | string;
 }
 
-export function StatusBadge({ status }: StatusBadgeProps) {
+export default function StatusBadge({
+  status,
+}: StatusBadgeProps) {
   const normalizedStatus = status.toLowerCase();
 
-  const statusConfig: Record<
-    string,
-    {
-      label: string;
-      className: string;
-    }
-  > = {
-    new: {
-      label: "New",
-      className: "status-new",
-    },
-    qualified: {
-      label: "Qualified",
-      className: "status-qualified",
-    },
-    contacted: {
-      label: "Contacted",
-      className: "status-contacted",
-    },
-    converted: {
-      label: "Converted",
-      className: "status-converted",
-    },
-    lost: {
-      label: "Lost",
-      className: "status-lost",
-    },
-  };
-
-  const config = statusConfig[normalizedStatus] ?? {
-    label: status,
-    className: "status-default",
-  };
+  const label =
+    normalizedStatus.charAt(0).toUpperCase() +
+    normalizedStatus.slice(1);
 
   return (
-    <span className={`status-badge ${config.className}`}>
+    <span
+      className={`status-badge status-${normalizedStatus}`}
+    >
       <span className="status-dot" />
-      {config.label}
+      {label}
     </span>
   );
 }

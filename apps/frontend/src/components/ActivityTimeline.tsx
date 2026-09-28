@@ -1,155 +1,106 @@
-import { useEffect, useState } from "react";
-
-import { getLeadAuditLogs } from "../api/leads";
 import type { AuditLog } from "../types/auditLog";
 
 interface ActivityTimelineProps {
-  leadId: string;
+  logs: AuditLog[];
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleString();
+function formatDateTime(date: string) {
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Unknown date";
+  }
+
+  return parsed.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function getEventLabel(eventType: string): string {
-  return eventType
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+function getEventLabel(eventType: string) {
+  switch (eventType) {
+    case "lead_created":
+      return "Lead Created";
 
-function getEventIcon(eventType: string): string {
-  switch (eventType.toUpperCase()) {
-    case "LEAD_CREATED":
-      return "+";
+    case "lead_updated":
+      return "Lead Updated";
 
-    case "LEAD_UPDATED":
-      return "✎";
-
-    case "STATUS_CHANGED":
-      return "↻";
+    case "lead_status_changed":
+      return "Status Changed";
 
     default:
-      return "•";
+      return eventType
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 }
 
-export function ActivityTimeline({
-  leadId,
+export default function ActivityTimeline({
+  logs,
 }: ActivityTimelineProps) {
-  const [activities, setActivities] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadActivities() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const data = await getLeadAuditLogs(leadId);
-
-        if (!cancelled) {
-          setActivities(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load activity",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadActivities();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [leadId]);
-
-  return (
-    <section className="activity-section">
-      <div className="section-header">
-        <div>
-          <h2>Activity Timeline</h2>
-
-          <p>
-            Recent activity and changes for this lead.
-          </p>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="state-card">
-          <div className="loading-spinner" />
-
-          <p>Loading activity...</p>
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="state-card error-state">
-          <div className="state-icon">!</div>
-
+  if (!logs.length) {
+    return (
+      <section className="timeline-section">
+        <div className="section-heading">
           <div>
-            <h3>Unable to load activity</h3>
-
-            <p>{error}</p>
+            <span className="eyebrow">ACTIVITY</span>
+            <h2>Activity Timeline</h2>
           </div>
         </div>
-      )}
 
-      {!loading && !error && activities.length === 0 && (
-        <div className="state-card empty-state">
-          <div className="state-icon">•</div>
+        <div className="empty-state">
+          <div className="empty-icon">◷</div>
 
           <h3>No activity yet</h3>
 
           <p>
-            Activity for this lead will appear here.
+            Changes to this lead will appear here.
           </p>
         </div>
-      )}
+      </section>
+    );
+  }
 
-      {!loading && !error && activities.length > 0 && (
-        <div className="activity-timeline">
-          {activities.map((activity) => (
-            <div
-              className="activity-item"
-              key={activity.id}
-            >
-              <div className="activity-marker">
-                {getEventIcon(activity.event_type)}
-              </div>
-
-              <div className="activity-content">
-                <div className="activity-top">
-                  <h3>
-                    {getEventLabel(activity.event_type)}
-                  </h3>
-
-                  <time dateTime={activity.created_at}>
-                    {formatDate(activity.created_at)}
-                  </time>
-                </div>
-
-                {activity.description && (
-                  <p>{activity.description}</p>
-                )}
-              </div>
-            </div>
-          ))}
+  return (
+    <section className="timeline-section">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">ACTIVITY</span>
+          <h2>Activity Timeline</h2>
         </div>
-      )}
+      </div>
+
+      <div className="activity-timeline">
+        {logs.map((log) => (
+          <div
+            className="timeline-item"
+            key={log.id}
+          >
+            <div className="timeline-marker">
+              <span />
+            </div>
+
+            <div className="timeline-content">
+              <div className="timeline-header">
+                <strong>
+                  {getEventLabel(log.event_type)}
+                </strong>
+
+                <span className="timeline-date">
+                  {formatDateTime(log.created_at)}
+                </span>
+              </div>
+
+              <p className="timeline-message">
+                {log.description}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
